@@ -23,7 +23,6 @@ if is_variable('cc')
         '-Wno-nullability-extension',
         '-Wno-nullable-to-nonnull-conversion',
         '-Wno-padded',
-        '-Wno-sign-conversion',
       ]
 
       if host_machine.system() == 'freebsd'
@@ -46,7 +45,6 @@ if is_variable('cc')
         '-Wno-format-nonliteral',
         '-Wno-inline',
         '-Wno-padded',
-        '-Wno-sign-conversion',
         '-Wno-switch-default',
         '-Wno-unsuffixed-float-constants',
         '-Wno-unused-const-variable',
