@@ -64,6 +64,8 @@ def test_thru(
             isyntax,
             "-p",
             "serd_test",
+            "-w",
+            out_path,
             "-I",
             base_uri,
             path,
@@ -87,8 +89,7 @@ def test_thru(
         ]
     )
 
-    with open(out_path, "wb") as out:
-        subprocess.run(out_cmd, check=True, stdout=out)
+    subprocess.run(out_cmd, check=True)
 
     proc = subprocess.run(
         thru_cmd, check=True, capture_output=True, encoding="utf-8"
