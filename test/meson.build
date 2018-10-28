@@ -44,6 +44,7 @@ unit_tests = [
   'log',
   'node',
   'node_syntax',
+  'nodes',
   'overflow',
   'reader',
   'reader_writer',
