@@ -53,6 +53,7 @@ unit_tests = [
   'string',
   'terse_write',
   'uri',
+  'world',
   'writer',
 ]
 
