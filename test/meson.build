@@ -39,9 +39,11 @@ subdir('headers')
 
 unit_tests = [
   'caret',
+  'cursor',
   'env',
   'free_null',
   'log',
+  'model',
   'node',
   'node_syntax',
   'nodes',
