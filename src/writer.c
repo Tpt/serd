@@ -13,7 +13,6 @@
 #include "uri_utils.h"
 
 #include "serd/attributes.h"
-#include "serd/buffer.h"
 #include "serd/env.h"
 #include "serd/event.h"
 #include "serd/log.h"
@@ -1319,15 +1318,15 @@ serd_writer_new(SerdWorld*      world,
   const WriteContext context = WRITE_CONTEXT_NULL;
   SerdWriter*        writer  = (SerdWriter*)calloc(1, sizeof(SerdWriter));
 
-  writer->world      = world;
-  writer->syntax     = syntax;
-  writer->flags      = flags;
-  writer->env        = env;
-  writer->root_node  = NULL;
-  writer->root_uri   = SERD_URI_NULL;
-  writer->context    = context;
-  writer->empty      = true;
-  writer->byte_sink  = serd_byte_sink_new(
+  writer->world     = world;
+  writer->syntax    = syntax;
+  writer->flags     = flags;
+  writer->env       = env;
+  writer->root_node = NULL;
+  writer->root_uri  = SERD_URI_NULL;
+  writer->context   = context;
+  writer->empty     = true;
+  writer->byte_sink = serd_byte_sink_new(
     ssink, stream, (flags & SERD_WRITE_BULK) ? SERD_PAGE_SIZE : 1);
 
   writer->anon_stack =
@@ -1445,27 +1444,4 @@ const SerdSink*
 serd_writer_sink(SerdWriter* writer)
 {
   return &writer->iface;
-}
-
-size_t
-serd_buffer_sink(const void* const buf,
-                 const size_t      size,
-                 const size_t      nmemb,
-                 void* const       stream)
-{
-  assert(size == 1);
-  (void)size;
-
-  SerdBuffer* buffer = (SerdBuffer*)stream;
-  buffer->buf        = (char*)realloc(buffer->buf, buffer->len + nmemb);
-  memcpy((uint8_t*)buffer->buf + buffer->len, buf, nmemb);
-  buffer->len += nmemb;
-  return nmemb;
-}
-
-char*
-serd_buffer_sink_finish(SerdBuffer* const stream)
-{
-  serd_buffer_sink("", 1, 1, stream);
-  return (char*)stream->buf;
 }
