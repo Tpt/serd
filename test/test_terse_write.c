@@ -46,8 +46,9 @@ test(void)
 
   serd_env_set_prefix(env, serd_string("rdf"), serd_string(NS_RDF));
 
-  SerdWriter* writer =
-    serd_writer_new(world, SERD_TURTLE, 0, env, serd_buffer_write, &buffer);
+  SerdOutputStream  output = serd_open_output_buffer(&buffer);
+  SerdWriter* const writer =
+    serd_writer_new(world, SERD_TURTLE, 0, env, &output, 1);
 
   const SerdSink* sink = serd_writer_sink(writer);
 
@@ -79,7 +80,6 @@ test(void)
   serd_sink_write(sink, 0, l2, rdf_rest, rdf_nil, NULL);
   check_output(writer, &buffer, "[]\n\trdf:value ( \"s1\" \"s2\" ) .\n");
 
-  serd_buffer_close(&buffer);
   serd_writer_free(writer);
   serd_node_free(rdf_nil);
   serd_node_free(rdf_rest);
@@ -90,6 +90,7 @@ test(void)
   serd_node_free(l2);
   serd_node_free(l1);
   serd_node_free(b1);
+  serd_close_output(&output);
   serd_env_free(env);
   serd_world_free(world);
   free(buffer.buf);

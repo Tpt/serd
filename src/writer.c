@@ -3,7 +3,7 @@
 
 #include "writer.h"
 
-#include "byte_sink.h"
+#include "block_dumper.h"
 #include "env.h"
 #include "namespaces.h"
 #include "node.h"
@@ -18,10 +18,10 @@
 #include "serd/env.h"
 #include "serd/event.h"
 #include "serd/log.h"
+#include "serd/output_stream.h"
 #include "serd/sink.h"
 #include "serd/statement.h"
 #include "serd/status.h"
-#include "serd/stream.h"
 #include "serd/string_view.h"
 #include "serd/syntax.h"
 #include "serd/uri.h"
@@ -126,7 +126,7 @@ struct SerdWriterImpl {
   SerdURIView     root_uri;
   WriteContext*   anon_stack;
   size_t          anon_stack_size;
-  SerdByteSink    byte_sink;
+  SerdBlockDumper output;
   WriteContext    context;
   char*           bprefix;
   size_t          bprefix_len;
@@ -254,7 +254,8 @@ ctx(SerdWriter* writer, const SerdField field)
 SERD_WARN_UNUSED_RESULT static size_t
 sink(const void* buf, size_t len, SerdWriter* writer)
 {
-  const size_t written = serd_byte_sink_write(buf, len, &writer->byte_sink);
+  const size_t written = serd_block_dumper_write(buf, 1, len, &writer->output);
+
   if (written != len) {
     if (errno) {
       char message[1024] = {0};
@@ -1302,14 +1303,15 @@ serd_writer_finish(SerdWriter* writer)
     st = write_sep(writer, writer->context.flags, SEP_GRAPH_END);
   }
 
-  serd_byte_sink_flush(&writer->byte_sink);
-
   // Free any lingering contexts in case there was an error
   while (writer->anon_stack_size > 0) {
     pop_context(writer);
   }
 
   free_context(writer);
+
+  serd_block_dumper_flush(&writer->output);
+
   writer->indent  = 0;
   writer->context = WRITE_CONTEXT_NULL;
   writer->empty   = true;
@@ -1317,16 +1319,21 @@ serd_writer_finish(SerdWriter* writer)
 }
 
 SerdWriter*
-serd_writer_new(SerdWorld*      world,
-                SerdSyntax      syntax,
-                SerdWriterFlags flags,
-                const SerdEnv*  env,
-                SerdWriteFunc   ssink,
-                void*           stream)
+serd_writer_new(SerdWorld*        world,
+                SerdSyntax        syntax,
+                SerdWriterFlags   flags,
+                const SerdEnv*    env,
+                SerdOutputStream* output,
+                size_t            block_size)
 {
   assert(world);
   assert(env);
-  assert(ssink);
+  assert(output);
+
+  SerdBlockDumper dumper = {NULL, NULL, 0U, 0U};
+  if (serd_block_dumper_open(&dumper, output, block_size)) {
+    return NULL;
+  }
 
   const WriteContext context = WRITE_CONTEXT_NULL;
   SerdWriter*        writer  = (SerdWriter*)calloc(1, sizeof(SerdWriter));
@@ -1337,10 +1344,9 @@ serd_writer_new(SerdWorld*      world,
   writer->env       = env;
   writer->root_node = NULL;
   writer->root_uri  = SERD_URI_NULL;
+  writer->output    = dumper;
   writer->context   = context;
   writer->empty     = true;
-  writer->byte_sink = serd_byte_sink_new(
-    ssink, stream, (flags & SERD_WRITE_BULK) ? SERD_PAGE_SIZE : 1);
 
   writer->anon_stack =
     (WriteContext*)calloc(anon_stack_capacity, sizeof(WriteContext));
@@ -1449,9 +1455,9 @@ serd_writer_free(SerdWriter* writer)
   }
 
   serd_writer_finish(writer);
+  serd_block_dumper_close(&writer->output);
   free(writer->anon_stack);
   free(writer->bprefix);
-  serd_byte_sink_free(&writer->byte_sink);
   serd_node_free(writer->root_node);
   free(writer);
 }
