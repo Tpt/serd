@@ -158,13 +158,13 @@ endif
 libserd = library(
   versioned_name,
   sources,
-  c_args: c_suppressions + extra_c_args + platform_args + [
+  c_args: [
     '-DSERD_INTERNAL',
     '-DSERD_MAJOR_VERSION=@0@'.format(serd_major_version),
     '-DSERD_MICRO_VERSION=@0@'.format(serd_micro_version),
     '-DSERD_MINOR_VERSION=@0@'.format(serd_minor_version),
     '-DSERD_VERSION="@0@"'.format(meson.project_version()),
-  ],
+  ] + c_suppressions + extra_c_args + platform_args,
   dependencies: [exess_dep, m_dep, zix_dep],
   gnu_symbol_visibility: 'hidden',
   include_directories: include_directories(['include', 'src']),
@@ -204,12 +204,6 @@ install_headers(c_headers, subdir: versioned_name / 'serd')
 # Build serdi command line utility
 if not get_option('tools').disabled()
   subdir('tools')
-
-  meson.override_find_program('serdi', serdi)
-
-  if not get_option('docs').disabled()
-    install_man(files('doc/serdi.1'))
-  endif
 endif
 
 ###########
