@@ -562,48 +562,42 @@ write_short_string_escape(SerdWriter* const writer, const char c)
   return 0;
 }
 
-static bool
-text_must_escape(const char c)
+static inline bool
+text_must_escape(const uint8_t c)
 {
   return c == '\\' || c == '"' || !in_range(c, 0x20, 0x7E);
 }
 
-SERD_WARN_UNUSED_RESULT static SerdStatus
-write_text(SerdWriter* writer,
-           TextContext ctx,
-           const char* utf8,
-           size_t      n_bytes)
+static size_t
+next_text_index(const char*  utf8,
+                const size_t begin,
+                const size_t end,
+                bool (*const predicate)(uint8_t))
 {
-  size_t     n_consecutive_quotes = 0;
-  SerdStatus st                   = SERD_SUCCESS;
+  size_t i = begin;
+  while (i < end && !predicate((uint8_t)utf8[i])) {
+    ++i;
+  }
+  return i;
+}
+
+SERD_WARN_UNUSED_RESULT static SerdStatus
+write_short_text(SerdWriter* writer, const char* utf8, size_t n_bytes)
+{
+  SerdStatus st = SERD_SUCCESS;
   for (size_t i = 0; !st && i < n_bytes;) {
-    if (utf8[i] != '"') {
-      n_consecutive_quotes = 0;
-    }
-
-    // Scan for the longest chunk of characters that can be written directly
-    size_t j = i;
-    for (; j < n_bytes && !text_must_escape(utf8[j]); ++j) {
-    }
-
-    // Write chunk as a single fast bulk write
-    st = esink(&utf8[i], j - i, writer);
+    // Write leading chunk as a single fast bulk write
+    const size_t j = next_text_index(utf8, i, n_bytes, text_must_escape);
+    st             = esink(&utf8[i], j - i, writer);
     if ((i = j) == n_bytes) {
       break; // Reached end
     }
 
     // Try to write character as a special short escape (newline and friends)
-    const char in         = utf8[i++];
-    size_t     escape_len = 0;
-    if (ctx == WRITE_LONG_STRING) {
-      n_consecutive_quotes = (in == '\"') ? (n_consecutive_quotes + 1) : 0;
-      escape_len           = write_long_string_escape(
-        writer, n_consecutive_quotes, i == n_bytes, in);
-    } else {
-      escape_len = write_short_string_escape(writer, in);
-    }
+    const char   in         = utf8[i++];
+    const size_t escape_len = write_short_string_escape(writer, in);
 
-    if (escape_len == 0) {
+    if (!escape_len) {
       // No special escape for this character, write full Unicode escape
       size_t size = 0;
       write_character(writer, (const uint8_t*)utf8 + i - 1, &size, &st);
@@ -614,8 +608,51 @@ write_text(SerdWriter* writer,
       if (size == 0) {
         // Corrupt input, write replacement character and scan to the next start
         st = esink(replacement_char, sizeof(replacement_char), writer);
-        for (; i < n_bytes && !is_utf8_leading((uint8_t)utf8[i]); ++i) {
-        }
+        i += next_text_index(utf8, i, n_bytes, is_utf8_leading);
+      } else {
+        i += size - 1;
+      }
+    }
+  }
+
+  return SERD_SUCCESS;
+}
+
+SERD_WARN_UNUSED_RESULT static SerdStatus
+write_long_text(SerdWriter* writer, const char* utf8, size_t n_bytes)
+{
+  size_t     n_quotes = 0;
+  SerdStatus st       = SERD_SUCCESS;
+  for (size_t i = 0; !st && i < n_bytes;) {
+    if (utf8[i] != '"') {
+      n_quotes = 0;
+    }
+
+    // Write leading chunk as a single fast bulk write
+    const size_t j = next_text_index(utf8, i, n_bytes, text_must_escape);
+    st             = esink(&utf8[i], j - i, writer);
+    if ((i = j) == n_bytes) {
+      break; // Reached end
+    }
+
+    // Try to write character as a special short escape (newline and friends)
+    const char in = utf8[i++];
+    n_quotes      = (in == '\"') ? (n_quotes + 1) : 0;
+    const size_t escape_len =
+      write_long_string_escape(writer, n_quotes, i == n_bytes, in);
+
+    if (!escape_len) {
+      // No special escape for this character, write full Unicode escape
+      size_t size = 0;
+      write_character(writer, (const uint8_t*)utf8 + i - 1, &size, &st);
+      if (st && !(writer->flags & SERD_WRITE_LAX)) {
+        return st;
+      }
+
+      if (size == 0) {
+        // Corrupt input, write replacement character and scan to the next start
+        st = esink(replacement_char, sizeof(replacement_char), writer);
+        i += next_text_index(utf8, i, n_bytes, is_utf8_leading);
       } else {
         i += size - 1;
       }
@@ -779,11 +816,11 @@ write_literal(SerdWriter* const        writer,
   SerdStatus st = SERD_SUCCESS;
   if (supports_abbrev(writer) && (node->flags & SERD_IS_LONG)) {
     TRY(st, esink("\"\"\"", 3, writer));
-    TRY(st, write_text(writer, WRITE_LONG_STRING, node_str, node->length));
+    TRY(st, write_long_text(writer, node_str, node->length));
     TRY(st, esink("\"\"\"", 3, writer));
   } else {
     TRY(st, esink("\"", 1, writer));
-    TRY(st, write_text(writer, WRITE_STRING, node_str, node->length));
+    TRY(st, write_short_text(writer, node_str, node->length));
     TRY(st, esink("\"", 1, writer));
   }
   if (lang && serd_node_string(lang)) {
