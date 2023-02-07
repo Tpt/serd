@@ -14,16 +14,13 @@
 
 #ifdef __cplusplus
 #  ifdef __GNUC__
-
 #    define SERD_BEGIN_DECLS                                                \
       _Pragma("GCC diagnostic push")                                        \
       _Pragma("GCC diagnostic ignored \"-Wzero-as-null-pointer-constant\"") \
       extern "C" {
-
 #    define SERD_END_DECLS \
       }                    \
       _Pragma("GCC diagnostic pop")
-
 #  else
 #    define SERD_BEGIN_DECLS extern "C" {
 #    define SERD_END_DECLS }
